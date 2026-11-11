@@ -4,6 +4,14 @@ Team 34: Wan Gehong, Wang Tianyi, Wu Jiarui, Yan Tianao.
 
 This project builds a US equity dataset from raw downloads and compares a six-factor direct score with Ridge, Lasso and XGBoost under common portfolio rules. Both notebooks contain the saved outputs of a complete sequential execution on 11 November 2026.
 
+Choose the workflow you need:
+
+| Purpose | Entry point | Local research data needed? |
+|---|---|---|
+| Read the study | [English report, 21 pages](reports/final/Group_34_Report.pdf), saved notebook outputs, or [result tables](results/) | No; view the published files without Run All. |
+| Edit/rebuild the report | [Editable report template](reports/final/notebook_report_template.tex) and the report-only commands below | No; uses saved outputs and requires the Python environment plus LaTeX. |
+| Repeat the research | Data-preparation notebook, then strategy notebook | Yes; obtain the team's raw files, or use a complete prepared snapshot as explained below. |
+
 ## Notebooks
 
 Run these notebooks in order, with a fresh kernel for each:
@@ -11,22 +19,24 @@ Run these notebooks in order, with a fresh kernel for each:
 1. [Equity Data Preparation](notebooks/Equity_Data_Preparation.ipynb): source inventory, market-quality checks, dated security mapping, financial and industry events, monthly universe construction, total-return prices, next-close labels and source-coverage audits.
 2. [Equity Strategy Research](notebooks/Equity_Strategy_Research.ipynb): input verification, factor screening, feature engineering, chronological CV, validation selection, evaluation, robustness, return attribution and accounting checks.
 
-Data preparation reads raw inputs without requiring an older research database. It publishes `data/processed/latest_snapshot.json` only after every stage succeeds. The strategy notebook verifies the completed dataset, its checksums, canonical price chain and labels. Every execution creates a new timestamped run and trains models afresh.
+Data preparation reads raw inputs without requiring an older research database. It publishes `data/processed/latest_snapshot.json` only after every stage succeeds. The strategy notebook verifies the completed dataset, its checksums, canonical price chain and labels. Each notebook creates a new timestamped run; the strategy notebook trains models afresh. Full execution is not needed to read saved results or rebuild the report.
 
 ## Local setup
 
-Use Python 3.13 from the repository root:
+Clone this fork, then use Python 3.13 from the repository root. The following shell commands use macOS/Linux paths:
 
 ```bash
+git clone https://github.com/jiarui22/dsa5205-project2-final.git
+cd dsa5205-project2-final
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -m pip install -e . --no-deps
 .venv/bin/python -m ipykernel install --user --name team34-project2 --display-name "Python (Team 34 Project 2)"
 ```
 
-Select **Python (Team 34 Project 2)** and use **Restart Kernel → Run All** in each notebook. On macOS, XGBoost may require `brew install libomp`.
+Open the notebooks in VS Code with Jupyter support, or an existing Jupyter installation. Select **Python (Team 34 Project 2)**. Use **Restart Kernel → Run All** in each notebook only when repeating the research. On macOS, XGBoost may require `brew install libomp`. On Windows PowerShell, create the environment with `py -3.13 -m venv .venv` and replace `.venv/bin/python` in Python commands with `.venv\Scripts\python.exe`; the PDF shell commands below use macOS/Linux syntax.
 
-Raw datasets are supplied separately and remain local:
+Raw datasets are supplied separately through the team's data-sharing channel and remain local. Git clone and GitHub's Download ZIP do not include the database. To rebuild it, extract/place the shared inputs in the layout below; keep the two named Compustat ZIP archives intact because the preparation code reads them directly:
 
 ```text
 data/
@@ -44,9 +54,21 @@ data/
     latest_snapshot.json
 ```
 
-The quarterly archive supplies full financial history and release proxies; the North America annual archive supplies historical SIC. Sina is checked with fresh requests, but its turnover/VWAP is excluded from strategy inputs because coverage is incomplete. Liquidity screening uses CRSP unadjusted close × share volume.
+The quarterly archive supplies the longer financial history and release proxies; the North America annual archive supplies historical SIC. The preparation notebook attempts fresh Sina requests and records failures, so this coverage-audit step can require internet access. Sina turnover/VWAP is excluded from strategy inputs because coverage is incomplete. Liquidity screening uses CRSP unadjusted close × share volume. The archived `SPY.gz` supplies the benchmark; it is not downloaded by the strategy notebook.
 
-Allow several GB of free space for the published dataset, training matrices and model outputs. `runs/` contains local execution artifacts; `results/` contains compact, shareable summaries. Data, backups, model files and per-security forecasts/holdings are excluded from Git. Saved notebook outputs are retained.
+Reserve space for raw archives, published panels, and each new run's training matrices and model outputs. `runs/` contains local execution artifacts; `results/` contains compact, shareable summaries. Data, backups, model files and per-security forecasts/holdings are excluded from Git. Saved notebook outputs are retained.
+
+### Use a completed shared snapshot
+
+If a teammate has already run data preparation, you can use their **complete prepared snapshot** and run only the strategy notebook. Set `DATA_DIRECTORY` in its first code cell to the folder that directly contains `panels/`, `metadata/` and `checksums.sha256`:
+
+```python
+DATA_DIRECTORY = "/your/local/path/research_snapshot"
+```
+
+Alternatively set `TEAM34_DATA_DIR` before launching Jupyter. Resolution priority is `DATA_DIRECTORY`, then `TEAM34_DATA_DIR`, then the local published pointer. Leave both explicit settings unset when using your own newly prepared default snapshot.
+
+The shared snapshot must include all panels, index files and metadata, including `snapshot.json`, `preprocessing_complete.json` and `activation.json` under `metadata/`. Its completion flags, precision policy and checksums are verified. An old folder containing only `open.pkl` and other price panels is insufficient. Use only trusted team pickle files. Copying `latest_snapshot.json` alone also does not work: the default-pointer route checks the local producer run's `complete.json`. An explicit complete snapshot path is the portable route for teammates.
 
 ## Research design
 
@@ -62,6 +84,8 @@ Allow several GB of free space for the published dataset, training matrices and 
 
 Trading uses next-close execution, Top100 selection, a rank-150 retention buffer, ten-session rebalancing, a 2% formation-weight cap and 10 bps per traded dollar. SPY and matched full-pool portfolios are controls. Costs, leave-one-factor-out checks and benchmark-relative return attribution use the six-factor market-cap portfolio; holdings-based risk attribution uses the validation-selected portfolio.
 
+The 4,366 identifiers are the union across the full history; daily eligible membership is about two thousand, not four thousand simultaneously.
+
 WQ price and screening calculations retain float64 precision before final model-feature storage. This avoids changes caused by differently normalized, prematurely rounded adjustment factors.
 
 ## Latest results and verification
@@ -71,11 +95,15 @@ The 2023 rule selects **six-factor direct score with market-cap weights** (`fund
 | 2024–2025 | Net CAGR | Annual volatility | Sharpe | Max drawdown |
 |---|---:|---:|---:|---:|
 | Selected strategy | 24.92% | 16.81% | 1.4074 | −20.76% |
+| Ridge / square-root cap | 12.31% | 20.80% | 0.6617 | −26.76% |
+| XGBoost / equal weight | 15.72% | 26.82% | 0.6783 | −29.43% |
 | SPY | 22.19% | 16.35% | 1.3071 | −18.76% |
+
+Representative weightings are frozen using 2023 validation, not chosen from the evaluation table. Lasso is ineligible in validation because it holds cash; its prediction diagnostics remain available. The selected strategy's CAGR gap to SPY is +2.73 percentage points, with the saved 20-session paired-bootstrap 95% interval [−8.79, +16.40] points.
 
 The notebooks include OOS prediction R², period-level return/risk plots, trading-cost and factor-ablation checks, linked return attribution, and a US adaptation of the repository's Barra-style market/industry/style model. Estimated residual alpha is conditional on that model and is not evidence of a guaranteed tradable alpha.
 
-Verification completed: **74 tests, 396 fresh model fits, 38 portfolio ledgers**, source-hash checks, universe truncation checks and an independent source-return check of 8,945,343 labels. A repeated XGBoost fit produced exactly identical predictions. See [reproduction audit](results/reproduction_audit.json) and [Chinese project status](项目最新进度.md).
+The published 11 November research audit records **74 passing tests, 396 fresh model fits, 38 portfolio ledgers**, source-hash checks, universe truncation checks and an independent source-return check of 8,945,343 labels. A repeated XGBoost fit produced exactly identical predictions. These are recorded checks, not a research rerun performed for the 12 November report/README update. See [reproduction audit](results/reproduction_audit.json) and [Chinese project status](项目最新进度.md).
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
@@ -83,4 +111,15 @@ PYTHONPATH=src .venv/bin/python -m pytest tests -q
 
 Financial statements are latest-download vintages; release dates are proxies, FIC/PRIUSA are static descriptors, and some terminal payouts remain unknown. The 2024–2025 results are a historical evaluation of previously inspected data, rather than a new blind holdout.
 
-**Deliverable status:** notebooks and compact results are current. Files under `reports/` retain the earlier report and have not been revised to this pipeline. The new presentation video is pending.
+**Deliverable status (12 November 2026):** the 21-page English [report](reports/final/Group_34_Report.pdf) now matches the saved results at upstream commit `743b82c`, including the raw-data pipeline, precision policy, selected model specifications, portfolio metrics, capitalization-weighted sensitivity tests, current attribution path and holdings-based risk analysis. This report revision did not train models, replay portfolios or resample bootstrap intervals. Its [input inventory](reports/final/notebook_report_inventory.json) records file hashes and the [report check](REPORT_VALIDATION.json) records publication verification. The new presentation video and confirmation of individual contributions/student IDs remain pending.
+
+To refresh report assets from the saved CSVs and Notebook outputs, without running either research notebook:
+
+```bash
+.venv/bin/python scripts/build_report_from_saved_results.py
+cd reports/final
+TEXINPUTS=./tex-support: pdflatex -interaction=nonstopmode -halt-on-error Group_34_Report.tex
+TEXINPUTS=./tex-support: pdflatex -interaction=nonstopmode -halt-on-error Group_34_Report.tex
+```
+
+LaTeX is required only for PDF compilation. The editable prose is `reports/final/notebook_report_template.tex`; the asset script copies it to the generated report source. Confidence intervals are read from the saved strategy Notebook at its displayed precision. The saved wealth-path image is retained, and other charts are redrawn from stored aggregates. Raw data and fitted model files are not required for this report-only rebuild.
