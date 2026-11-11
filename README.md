@@ -4,13 +4,13 @@ Team 34: Wan Gehong, Wang Tianyi, Wu Jiarui, Yan Tianao.
 
 This project builds a US equity dataset from raw downloads and compares a six-factor direct score with Ridge, Lasso and XGBoost under common portfolio rules. Both notebooks contain the saved outputs of a complete sequential execution on 11 November 2026.
 
-Choose the workflow you need:
+The repository supports the following workflows:
 
 | Purpose | Entry point | Local research data needed? |
 |---|---|---|
 | Read the study | [English report, 21 pages](reports/final/Group_34_Report.pdf), saved notebook outputs, or [result tables](results/) | No; view the published files without Run All. |
 | Edit/rebuild the report | [Editable report template](reports/final/notebook_report_template.tex) and the report-only commands below | No; uses saved outputs and requires the Python environment plus LaTeX. |
-| Repeat the research | Data-preparation notebook, then strategy notebook | Yes; obtain the team's raw files, or use a complete prepared snapshot as explained below. |
+| Reproduce the experiments | Data-preparation notebook, then strategy notebook | Yes; use the required raw inputs or a complete prepared dataset, as described below. |
 
 ## Notebooks
 
@@ -19,11 +19,11 @@ Run these notebooks in order, with a fresh kernel for each:
 1. [Equity Data Preparation](notebooks/Equity_Data_Preparation.ipynb): source inventory, market-quality checks, dated security mapping, financial and industry events, monthly universe construction, total-return prices, next-close labels and source-coverage audits.
 2. [Equity Strategy Research](notebooks/Equity_Strategy_Research.ipynb): input verification, factor screening, feature engineering, chronological CV, validation selection, evaluation, robustness, return attribution and accounting checks.
 
-Data preparation reads raw inputs without requiring an older research database. It publishes `data/processed/latest_snapshot.json` only after every stage succeeds. The strategy notebook verifies the completed dataset, its checksums, canonical price chain and labels. Each notebook creates a new timestamped run; the strategy notebook trains models afresh. Full execution is not needed to read saved results or rebuild the report.
+Data preparation constructs the research dataset directly from raw inputs. It publishes `data/processed/latest_snapshot.json` only after every stage succeeds. The strategy notebook verifies the completed dataset, its checksums, canonical price chain and labels. Each notebook creates a new timestamped run; the strategy notebook trains models afresh. Full execution is not needed to read saved results or rebuild the report.
 
 ## Local setup
 
-Clone this fork, then use Python 3.13 from the repository root. The following shell commands use macOS/Linux paths:
+Clone the repository, then use Python 3.13 from the repository root. The following shell commands use macOS/Linux paths:
 
 ```bash
 git clone https://github.com/jiarui22/dsa5205-project2-final.git
@@ -36,7 +36,7 @@ python3.13 -m venv .venv
 
 Open the notebooks in VS Code with Jupyter support, or an existing Jupyter installation. Select **Python (Team 34 Project 2)**. Use **Restart Kernel → Run All** in each notebook only when repeating the research. On macOS, XGBoost may require `brew install libomp`. On Windows PowerShell, create the environment with `py -3.13 -m venv .venv` and replace `.venv/bin/python` in Python commands with `.venv\Scripts\python.exe`; the PDF shell commands below use macOS/Linux syntax.
 
-Raw datasets are supplied separately through the team's data-sharing channel and remain local. Git clone and GitHub's Download ZIP do not include the database. To rebuild it, extract/place the shared inputs in the layout below; keep the two named Compustat ZIP archives intact because the preparation code reads them directly:
+Raw data are not included in this repository. To reproduce the experiments, place the required source files in the layout below. Keep the two named Compustat ZIP archives intact because the preparation code reads them directly:
 
 ```text
 data/
@@ -58,17 +58,17 @@ The quarterly archive supplies the longer financial history and release proxies;
 
 Reserve space for raw archives, published panels, and each new run's training matrices and model outputs. `runs/` contains local execution artifacts; `results/` contains compact, shareable summaries. Data, backups, model files and per-security forecasts/holdings are excluded from Git. Saved notebook outputs are retained.
 
-### Use a completed shared snapshot
+### Use a prepared dataset
 
-If a teammate has already run data preparation, you can use their **complete prepared snapshot** and run only the strategy notebook. Set `DATA_DIRECTORY` in its first code cell to the folder that directly contains `panels/`, `metadata/` and `checksums.sha256`:
+A complete dataset produced by the preparation notebook can be used directly with the strategy notebook. Set `DATA_DIRECTORY` in the strategy notebook's first code cell to the folder that directly contains `panels/`, `metadata/` and `checksums.sha256`:
 
 ```python
 DATA_DIRECTORY = "/your/local/path/research_snapshot"
 ```
 
-Alternatively set `TEAM34_DATA_DIR` before launching Jupyter. Resolution priority is `DATA_DIRECTORY`, then `TEAM34_DATA_DIR`, then the local published pointer. Leave both explicit settings unset when using your own newly prepared default snapshot.
+Alternatively set `TEAM34_DATA_DIR` before launching Jupyter. Resolution priority is `DATA_DIRECTORY`, then `TEAM34_DATA_DIR`, then the local published pointer. Leave both explicit settings unset to use the default dataset published by data preparation.
 
-The shared snapshot must include all panels, index files and metadata, including `snapshot.json`, `preprocessing_complete.json` and `activation.json` under `metadata/`. Its completion flags, precision policy and checksums are verified. An old folder containing only `open.pkl` and other price panels is insufficient. Use only trusted team pickle files. Copying `latest_snapshot.json` alone also does not work: the default-pointer route checks the local producer run's `complete.json`. An explicit complete snapshot path is the portable route for teammates.
+The dataset must include all panels, index files and metadata, including `snapshot.json`, `preprocessing_complete.json` and `activation.json` under `metadata/`. Completion flags, precision policy and checksums are verified before use. Load pickle files only from trusted sources. The default-pointer route also requires the producer run's `complete.json`; an explicit path can be used for a complete dataset stored elsewhere.
 
 ## Research design
 
@@ -103,7 +103,7 @@ Representative weightings are frozen using 2023 validation, not chosen from the 
 
 The notebooks include OOS prediction R², period-level return/risk plots, trading-cost and factor-ablation checks, linked return attribution, and a US adaptation of the repository's Barra-style market/industry/style model. Estimated residual alpha is conditional on that model and is not evidence of a guaranteed tradable alpha.
 
-The published 11 November research audit records **74 passing tests, 396 fresh model fits, 38 portfolio ledgers**, source-hash checks, universe truncation checks and an independent source-return check of 8,945,343 labels. A repeated XGBoost fit produced exactly identical predictions. These are recorded checks, not a research rerun performed for the 12 November report/README update. See [reproduction audit](results/reproduction_audit.json) and [Chinese project status](项目最新进度.md).
+The reproducibility audit records **74 passing tests, 396 fresh model fits, 38 portfolio ledgers**, source-hash checks, universe truncation checks and an independent source-return check of 8,945,343 labels. A repeated XGBoost fit produced exactly identical predictions. See the [reproduction audit](results/reproduction_audit.json) for the recorded checks.
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
@@ -111,7 +111,9 @@ PYTHONPATH=src .venv/bin/python -m pytest tests -q
 
 Financial statements are latest-download vintages; release dates are proxies, FIC/PRIUSA are static descriptors, and some terminal payouts remain unknown. The 2024–2025 results are a historical evaluation of previously inspected data, rather than a new blind holdout.
 
-**Deliverable status (12 November 2026):** the 21-page English [report](reports/final/Group_34_Report.pdf) now matches the saved results at upstream commit `743b82c`, including the raw-data pipeline, precision policy, selected model specifications, portfolio metrics, capitalization-weighted sensitivity tests, current attribution path and holdings-based risk analysis. This report revision did not train models, replay portfolios or resample bootstrap intervals. Its [input inventory](reports/final/notebook_report_inventory.json) records file hashes and the [report check](REPORT_VALIDATION.json) records publication verification. The new presentation video and confirmation of individual contributions/student IDs remain pending.
+## Report and supporting evidence
+
+The 21-page English [report](reports/final/Group_34_Report.pdf) presents the data pipeline, precision policy, model specifications, portfolio results, sensitivity analyses, return attribution and holdings-based risk analysis. The [input inventory](reports/final/notebook_report_inventory.json) records source-file hashes, and the [report validation record](REPORT_VALIDATION.json) documents numerical and layout checks.
 
 To refresh report assets from the saved CSVs and Notebook outputs, without running either research notebook:
 
