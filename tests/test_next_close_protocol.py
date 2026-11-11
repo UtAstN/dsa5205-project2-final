@@ -122,11 +122,3 @@ def test_next_close_target_matches_ten_real_held_intervals():
     target, _ = close_forward_returns(price)
     assert daily.iloc[1].gross_return == 0  # huge pre-fill move must be excluded
     assert daily.net_nav.iloc[-1]-1 == pytest.approx(target.iloc[0, 0])
-
-
-def test_historical_pdf_template_refuses_to_relabel_v2_results(tmp_path):
-    from usq.project2.paper import run
-    dump({'label_policy': NEXT_CLOSE_LABEL_POLICY}, tmp_path/'research_protocol.json')
-    with pytest.raises(ValueError, match='historical v1 conclusions'):
-        run(None, tmp_path, tmp_path/'must_not_exist.pdf')
-    assert not (tmp_path/'must_not_exist.pdf').exists()

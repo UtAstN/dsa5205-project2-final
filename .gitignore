@@ -6,7 +6,7 @@ __pycache__/
 .DS_Store
 .env
 .env.*
-/data/
+/data
 /runs/
 *.pkl
 *.parquet
@@ -16,3 +16,5 @@ reports/final/*.aux
 reports/final/*.log
 reports/final/*.out
 reports/final/*.toc
+
+/backups/

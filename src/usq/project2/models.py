@@ -132,10 +132,10 @@ def fit_model(kind, params, x, y):
     if kind == "ridge":
         model = Ridge(alpha=params["alpha_per_sample"]*len(y), solver="cholesky")
     elif kind == "lasso":
-        model = Lasso(alpha=params["alpha"], max_iter=500, tol=1e-5, selection="cyclic")
+        model = Lasso(alpha=params["alpha"], max_iter=5000, tol=1e-5, selection="cyclic", precompute=True)
     elif kind == "xgboost":
         from xgboost import XGBRegressor
-        model = XGBRegressor(**MODEL_POLICY["xgboost_fixed"], **params, objective="reg:squarederror")
+        model = XGBRegressor(**{**MODEL_POLICY["xgboost_fixed"], **params}, objective="reg:squarederror")
     else:
         raise ValueError(kind)
     with threadpool_limits(limits=4):

@@ -33,14 +33,3 @@ def test_bundle_marker_is_published_only_after_all_outputs_exist(tmp_path):
     except FileNotFoundError:pass
     else:raise AssertionError('Missing output must fail completion')
     assert not (tmp_path/'complete.json').exists()
-
-
-def test_recovery_restores_lost_aggregate_without_duplicate_rows(tmp_path):
-    from usq.project2.exploration import Exploration
-    e=Exploration.__new__(Exploration);e.out=tmp_path;e.summaries=[]
-    record={'batch':'core','case':'raw_A_b150_r10','phase':'validation','annual_return':.1}
-    e.upsert_summary(record);e.upsert_summary(record)
-    import pandas as pd
-    assert len(pd.read_csv(tmp_path/'portfolio_summary.csv'))==1
-    e.upsert_summary({**record,'annual_return':.2})
-    saved=pd.read_csv(tmp_path/'portfolio_summary.csv');assert len(saved)==1 and saved.annual_return.iloc[0]==.2

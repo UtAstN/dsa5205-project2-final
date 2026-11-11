@@ -32,14 +32,20 @@ def composite(parts, exclude=None):
 
 
 class FinalStudy:
+    phases = PHASES
+
     def __init__(self, config, output, standalone=False):
         self.cfg = json.loads(Path(config).read_text())
         self.standalone = standalone
         if standalone:
-            self.cfg['execution_mode'] = 'standalone nominated strategy; no research archives required'
-        self.paths = {k: Path(self.cfg[k]) for k in
-                      ['database', 'baseline', 'exploration', 'deep', 'late_fusion']}
-        self.db, self.base, self.exp, self.deep, self.late = self.paths.values()
+            self.cfg['execution_mode'] = 'independent research experiment'
+        if standalone:
+            self.paths = {'database': Path(self.cfg['database'])}
+            self.db = self.paths['database']
+            self.base = self.exp = self.deep = self.late = None
+        else:
+            self.paths = {k: Path(self.cfg[k]) for k in ['database', 'baseline', 'exploration', 'deep', 'late_fusion']}
+            self.db, self.base, self.exp, self.deep, self.late = self.paths.values()
         self.out = Path(output)
         if any(self.out.resolve() == p.resolve() or p.resolve() in self.out.resolve().parents
                for p in self.paths.values()):
@@ -50,23 +56,25 @@ class FinalStudy:
         for key in ['top_n', 'buffer_n', 'rebalance_every', 'cost_bps', 'max_target_weight', 'tie_seed']:
             assert self.cfg[key] == dict(top_n=100, buffer_n=150, rebalance_every=10,
                 cost_bps=10, max_target_weight=.02, tie_seed=5205)[key]
-        assert self.cfg['nominated_strategy'] == 'fundamental_sqrt_cap'
+        assert self.cfg.get('baseline_case', self.cfg.get('nominated_strategy')) == 'fundamental_sqrt_cap'
         p = self.out/'protocol.json'
         if p.exists() and json.loads(p.read_text()) != self.cfg:
             raise ValueError('Protocol changed; use new output')
-        atomic_json(p, self.cfg)  # nomination recorded before this replay
-        signal_config = Path(config).with_name('project2_final_signals.json')
-        self.selection = json.loads((signal_config if standalone else self.base/'factor_selection.json').read_text())
+        atomic_json(p, self.cfg)  # Record this experiment before computation
+        self.selection = self.cfg['signals'] if standalone else json.loads((self.base/'factor_selection.json').read_text())
         self.market = ResearchMarket(self.db)
         self.u = pd.read_pickle(self.db/'panels/universe.pkl')
-        self.dates = self.u.loc['20220101':'20251231'].index
+        self.dates = self.u.loc[self.phases['validation'][0]:self.phases['evaluation'][1]].index
         observed = np.zeros(self.u.shape, dtype=bool)
         inputs = {'config': digest(config), 'snapshot': digest(self.db/'checksums.sha256'),
-                  'factor_selection': digest(signal_config if standalone else self.base/'factor_selection.json')}
+                  'factor_selection': digest(config if standalone else self.base/'factor_selection.json')}
         prices = price_inputs(self.load, self.u) if standalone else None
         for name in self.selection['wq']:
-            p = self.base/'factors'/f'{name}.pkl'
-            f = wq(int(name[2:]), prices) if standalone else pd.read_pickle(p)
+            if standalone:
+                f = wq(int(name[2:]), prices)
+            else:
+                p = self.base/'factors'/f'{name}.pkl'
+                f = pd.read_pickle(p)
             assert f.index.equals(self.u.index) and f.columns.equals(self.u.columns)
             observed |= np.isfinite(f)
             if not standalone:
@@ -74,7 +82,8 @@ class FinalStudy:
         del prices
         if not standalone:
             np.testing.assert_array_equal(observed, np.load(self.base/'design/observed.npy', mmap_mode='r'))
-        self.allowed = (self.u.eq(1) & observed).reindex(self.dates)
+        self.rank_eligible = self.u.eq(1) & observed
+        self.allowed = self.rank_eligible.reindex(self.dates)
         self.cap = pd.DataFrame(self.market.cap, index=self.u.index, columns=self.u.columns).reindex(self.dates)
         self.common = self.allowed & np.isfinite(self.cap) & self.cap.gt(0)
         self.rows = []
@@ -118,6 +127,9 @@ class FinalStudy:
                 f = expand_events(events, self.u.index, self.u.columns).where(self.u.eq(1))
                 del q, events
             f = f.replace([np.inf, -np.inf], np.nan).astype('float32')
+            observer = getattr(self, 'factor_observer', None)
+            if observer is not None:
+                observer(name, f)
             if not self.standalone:
                 reference = pd.read_pickle(self.base/'factors'/f'{name}.pkl')
                 np.testing.assert_array_equal(f, reference)
@@ -147,35 +159,29 @@ class FinalStudy:
         required = ['daily.csv', 'summary.json', 'events.csv', 'monthly_holdings.parquet']
         if retain:
             required.append('weights.pkl')
-        if bundle_complete(folder, 'complete.json', sig, required):
-            summary = json.loads((folder/'summary.json').read_text())
-            d = pd.read_csv(folder/'daily.csv', dtype={'date': str}).set_index('date')
-            if retain:
-                self.final_weights = pd.read_pickle(folder/'weights.pkl')
-        else:
-            (folder/'complete.json').unlink(missing_ok=True)
-            d, w, events, summary = self.market.backtest(score, *PHASES[phase], weights=True,
-                cost_bps=cost, buffer_n=buffer, rebalance_every=every, weighting=weighting,
-                max_weight=maximum, all_eligible=all_eligible)
-            independent = (w.astype(float)*self.assets.reindex(w.index)).sum(axis=1)
-            error = float((independent-d.gross_return).abs().max())
-            assert error < 2e-7
-            np.testing.assert_allclose(d.net_return, d.gross_return-d.cost, atol=1e-12)
-            np.testing.assert_allclose(d.cost, d.traded_notional*cost/10000, atol=1e-12)
-            summary.update(case=case, phase=phase, mean_cash=float(d.cash_weight.mean()),
-                gross_cagr=float((1+d.gross_return).prod()**(252/len(d))-1),
-                max_held_weight=float(w.to_numpy().max()), independent_gross_error=error)
-            d.to_csv(folder/'daily.csv')
-            events.to_csv(folder/'events.csv', index=False)
-            m = w.groupby(w.index.str[:6]).tail(1)
-            ii, jj = np.where(m.to_numpy() > 0)
-            pd.DataFrame({'date': m.index.to_numpy()[ii], 'sid': m.columns.to_numpy()[jj],
-                          'weight': m.to_numpy()[ii, jj]}).to_parquet(folder/'monthly_holdings.parquet', index=False)
-            if retain:
-                w.to_pickle(folder/'weights.pkl')
-                self.final_weights = w
-            atomic_json(folder/'summary.json', summary)
-            finish_bundle(folder, 'complete.json', sig, required)
+        (folder/'complete.json').unlink(missing_ok=True)
+        d, w, events, summary = self.market.backtest(score, *self.phases[phase], weights=True,
+            cost_bps=cost, buffer_n=buffer, rebalance_every=every, weighting=weighting,
+            max_weight=maximum, all_eligible=all_eligible)
+        independent = (w.astype(float)*self.assets.reindex(w.index)).sum(axis=1)
+        error = float((independent-d.gross_return).abs().max())
+        assert error < 2e-7
+        np.testing.assert_allclose(d.net_return, d.gross_return-d.cost, atol=1e-12)
+        np.testing.assert_allclose(d.cost, d.traded_notional*cost/10000, atol=1e-12)
+        summary.update(case=case, phase=phase, mean_cash=float(d.cash_weight.mean()),
+            gross_cagr=float((1+d.gross_return).prod()**(252/len(d))-1),
+            max_held_weight=float(w.to_numpy().max()), independent_gross_error=error)
+        d.to_csv(folder/'daily.csv')
+        events.to_csv(folder/'events.csv', index=False)
+        m = w.groupby(w.index.str[:6]).tail(1)
+        ii, jj = np.where(m.to_numpy() > 0)
+        pd.DataFrame({'date': m.index.to_numpy()[ii], 'sid': m.columns.to_numpy()[jj],
+                      'weight': m.to_numpy()[ii, jj]}).to_parquet(folder/'monthly_holdings.parquet', index=False)
+        if retain:
+            w.to_pickle(folder/'weights.pkl')
+            self.final_weights = w
+        atomic_json(folder/'summary.json', summary)
+        finish_bundle(folder, 'complete.json', sig, required)
         self.rows = [r for r in self.rows if (r['case'], r['phase']) != (case, phase)] + [summary]
         pd.DataFrame(self.rows).to_csv(self.out/'portfolio_summary.csv', index=False)
         progress('final_portfolio', case=case, phase=phase, CAGR=summary['annual_return'])

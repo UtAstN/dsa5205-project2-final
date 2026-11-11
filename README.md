@@ -1,83 +1,63 @@
-# DSA5205 Project 2 — Team 34 Final Study
+# DSA5205 Project 2 — Equity Strategy Research
 
-**Fundamental Signal Reconstruction and Portfolio Implementation in US Equities**
+Team 34: Wan Gehong, Wang Tianyi, Wu Jiarui, Yan Tianao.
 
-Members: Wan Gehong, Wang Tianyi, Wu Jiarui, Yan Tianao.
+The main entry point is [Equity Strategy Research](notebooks/Equity_Strategy_Research.ipynb). It builds the research dataset from authorized inputs, screens signals, trains and validates models, and evaluates portfolios net of trading costs. See [项目最新进度.md](项目最新进度.md) for the changes since the previous team version and the remaining deliverables.
 
-## Start here
+## Setup and execution
 
-- [Formal English report, 22 pages](reports/final/Group_34_Report.pdf): Abstract on page 1; contents on page 2.
-- [Editable LaTeX](reports/final/Group_34_Report.tex).
-- [Execution guide](docs/FINAL_STUDY.md).
-- [Separate progress record](Project2_最终版进度.md).
-- [Compact aggregate evidence](results/project2_final/README.md).
-
-## Strategy and findings
-
-Average six fixed-direction fundamental percentile scores; select Top100 with a rank-150 retention buffer; rebalance every ten sessions; use square-root-capitalization weights with a 2% formation target cap. Signal T close, execution T+1 close. Charge 10bps per dollar purchased or sold.
-
-Observed 2023–2025 net CAGR: **23.34%**; Sharpe: **1.381**; maximum drawdown: **−20.78%**. SPY CAGR: 22.86%, with better Sharpe and drawdown. This is a retrospectively nominated candidate, not a blind-test winner. Stress tests and uncertainty do not establish robust outperformance.
-
-The 0.47-point difference to SPY decomposes exactly into three matched comparisons (report §9): **+7.96** points of selection against the same universe at the same weights, **−6.70** points from holding that universe at square-root rather than capitalization weights, and **−0.78** points between the capitalization-weighted universe and SPY. The selection term is concentrated in 2024 and depends on the weighting scheme, and the candidate's 7.27% tracking error means about 8.4 points of annual excess would be needed over three years to reach two standard errors. The attribution is computed from stored daily returns after the evaluation period was inspected; it fits and selects nothing.
-
-Data-vintage, membership and terminal-settlement limitations remain disclosed.
-
-## Install and test
-
-From this repository root, using Python 3.13:
+From the repository root, create a Python 3.13 environment and install the project:
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-PYTHONPATH=src .venv/bin/python -m pytest tests -q
+.venv/bin/python -m pip install -e . --no-deps
+.venv/bin/python -m ipykernel install --user --name team34-project2 --display-name "Python (Team 34 Project 2)"
 ```
 
-Only relevant regression tests are included. The original workspace's 144-test suite is not claimed to be reproduced in full by this smaller repository. On macOS, importing XGBoost needs Homebrew's OpenMP runtime (`brew install libomp`); the final strategy itself does not fit XGBoost.
+On macOS, XGBoost may require the OpenMP runtime (`brew install libomp`).
 
-## Video
+Obtain the team's authorized research snapshot and place its contents under `data/`. The notebook expects `data/panels/`, `data/metadata/` and `data/checksums.sha256`. This is a supplied market and accounting panel snapshot with a cached SPY benchmark, and is excluded from Git. The notebook verifies input hashes, audits coverage and financial availability, and writes a separate cleaned dataset with rebuilt labels.
 
-`video/slides.html` is the 30-slide animated deck (open in a browser; arrow keys to move, `n` toggles speaker notes). Slides cross-fade with a push, content rises in sequence, headline numbers count up, figures wipe in, and terminal output appears line by line. Every number on the slides is taken from `reports/final/tables/` and `reports/final/numbers.tex`; the figures are exported from `reports/final/figures/`.
-
-`video/build_video.py` renders the deck into an MP4 with synthesized narration on macOS. The deck exposes `seek(slide, ms)`, which freezes every animation at an exact time, so the script screenshots each slide's animated opening frame by frame at 25 fps (Playwright), holds the last frame for the rest of the narration (`say`), and muxes with ffmpeg. Picture and voice are aligned by construction; no screen recording is involved.
+Open the notebook with the **Python (Team 34 Project 2)** kernel and choose **Restart Kernel → Run All**. A terminal run from the repository root is also supported:
 
 ```bash
-python3 -m pip install -r video/requirements.txt && python3 -m playwright install chromium
-cd video && python3 build_video.py --dry-run   # word counts and estimated length
-cd video && python3 build_video.py             # writes video/Group_34_Video.mp4 (about 20 min)
+.venv/bin/jupyter nbconvert --to notebook --execute \
+  --ExecutePreprocessor.kernel_name=team34-project2 \
+  --ExecutePreprocessor.timeout=-1 \
+  --output=Equity_Strategy_Research.executed \
+  --output-dir=runs \
+  notebooks/Equity_Strategy_Research.ipynb
 ```
 
-`scripts/demo_run.sh` is a paced end-to-end run meant to be screen-recorded: with the authorized snapshot it builds the labelled panels, reruns the candidate through validation and evaluation net of costs, and reconciles the result with the shipped ledgers day by day (`scripts/show_summary.py`); `bash scripts/demo_run.sh aggregates` runs the data-free part. `docs/RECORDING_GUIDE.md` explains how to record it, and `build_video.py --redo 16,17 --clip-after 15=clips/run.mp4` splices the recording into the video while reusing every unchanged segment.
+Allow time and disk space for data preparation, 396 model fits, 38 portfolio ledgers and the daily factor model. A fresh execution builds a new timestamped experiment under `runs/` from the supplied snapshot.
 
-The narration text is in each slide's `<aside class="notes">`; `docs/VIDEO_SCRIPT.md` has the same content as a speaker script for recording a human voice-over.
+**Release status.** Saved notebook outputs combine the main run, verified checkpoint recovery and later targeted reruns for the weighting comparison, OOS diagnostics and holdings-based attribution. The current notebook still needs one uninterrupted top-to-bottom rerun to verify the complete workflow. The report under `reports/` reflects the previous study, and the video for the current notebook is pending.
 
-## Rebuild report figures without original data
+## Research design
+
+| Stage | Dates and rule |
+|---|---|
+| WQ direction and screening | Calibrate directions in 2015–2017. Screen 36 WQ candidates in 2018–2019 using RankIC, coverage, annual stability and correlation. |
+| Hyperparameter selection | Use expanding-window CV with annual scoring folds in 2020–2022. Compare fundamental, fundamental plus WQ, and engineered features for Ridge, Lasso and XGBoost. |
+| Portfolio selection | In 2023, compare four scores under three weightings: equal, square-root capitalization and capitalization. Select the highest net Sharpe among the 12 candidates with finite Sharpe and mean cash at most 5%. |
+| Chronological evaluation | Evaluate the frozen choices in 2024–2025. ML models refit every half-year on the preceding five calendar years using only labels that matured before the forecast boundary. |
+
+Signals formed at the close are executed at the next close. The supervised target is the adjusted return from T+1 close to T+11 close. Portfolio tests use a Top100 target, rank-150 retention buffer, ten-session rebalancing, 2% formation weight cap and a 10 bps charge per traded dollar. SPY and matched full-pool portfolios are benchmarks. Accounting vintages, universe provenance and unresolved terminal payouts constrain interpretation.
+
+## Results and diagnostics
+
+The 2023 validation selects **six-factor direct scoring with capitalization weights**. Its 2024–2025 net CAGR is **24.92%**, net Sharpe **1.407**, and maximum drawdown **−20.76%**. On the same dates, SPY records **22.19%**, **1.307**, and **−18.76%**, respectively.
+
+- [Portfolio summary](results/portfolio_summary.csv) and [selection record](results/frozen_family.json) document the candidate grid and decision.
+- [Period metrics](results/period_metrics.csv) and [prediction OOS R²](results/period_oos_r2.csv) support the four-panel comparison. The six-factor score is mapped to return units with pooled OLS using mature labels from the same past five-year windows. This diagnostic leaves the portfolio's direct ranking rule intact.
+- The notebook includes the selection, weighting and universe decomposition, plus holdings-based Barra-style attribution for the selected portfolio. [Factor exposures and contributions](results/barra_factors.csv) and [residual alpha](results/barra_alpha.csv) use the available market, SIC industry and nine style factors. Growth is unavailable. Residual alpha is conditional on this research risk model.
+- [Portfolio audit](results/portfolio_audit.json) records ledger reconciliation. Full daily artifacts are written under `runs/`.
+
+Run regression tests from the repository root:
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/build_final_report_assets.py
-cd reports/final
-TEXINPUTS=./tex-support: pdflatex -interaction=nonstopmode -halt-on-error Group_34_Report.tex
-TEXINPUTS=./tex-support: pdflatex -interaction=nonstopmode -halt-on-error Group_34_Report.tex
+.venv/bin/python -m pytest tests -q
 ```
 
-The asset script also recomputes the return attribution and market-model diagnostics (`src/usq/project2/attribution.py`) from the stored daily returns, writes them to `results/project2_final/tables/`, and generates `reports/final/numbers.tex`, the macros behind every attribution number quoted in the report text. To print the attribution tables alone, run `PYTHONPATH=src .venv/bin/python -m usq.project2.attribution`.
-
-LaTeX is required for PDF compilation. Missing template packages are vendored with their original license notices. Report aggregates contain strategy returns and statistical summaries, not security-level source quotes, forecasts or holdings.
-
-## Recompute the candidate with authorized data
-
-Obtain the same authorized base snapshot from the team. It must contain the documented panels, metadata and checksums. Original data and historical experiment outputs are excluded.
-
-```bash
-PYTHONPATH=src .venv/bin/python -m usq.database.close_labels \
-  --source data --output runs/snapshots/team34_nextclose10_v2
-PYTHONPATH=src .venv/bin/python -m usq.project2.final_study \
-  --standalone --output runs/project2_final_standalone_v1
-```
-
-The standalone path rebuilds signals and runs 14 portfolio/phase comparisons without historical factor caches or model predictions. See the guide for output protection and limitations. Optional full-study replay and its verifier require the team's private historical experiment directories; they are not prerequisites for the standalone strategy or report rebuild.
-
-## Layout and provenance
-
-`configs/`: frozen definitions. `src/usq/`: final entry and required shared modules. `tests/`: regression tests. `scripts/`: report assets and optional full-study verification. `results/project2_final/`: aggregate evidence. `reports/final/`: PDF, LaTeX, figures and tables. `docs/`: execution guide.
-
-This curated version continues the [original team repository](https://github.com/jiarui22/dsa5205_project2). Historical local experiments remain preserved separately. No new license grant is asserted for original team code, institutional data, or the supplied template.
+Source is under `src/`, tests under `tests/`, and compact result tables under `results/`. The local `data/`, `backups/` and `runs/` directories are excluded from the repository.
