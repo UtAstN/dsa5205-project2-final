@@ -2,11 +2,20 @@
 
 Team 34: Wan Gehong, Wang Tianyi, Wu Jiarui, Yan Tianao.
 
-The main entry point is [Equity Strategy Research](notebooks/Equity_Strategy_Research.ipynb). It builds the research dataset from authorized inputs, screens signals, trains and validates models, and evaluates portfolios net of trading costs. See [项目最新进度.md](项目最新进度.md) for the changes since the previous team version and the remaining deliverables.
+This project builds a US equity dataset from raw downloads and compares a six-factor direct score with Ridge, Lasso and XGBoost under common portfolio rules. Both notebooks contain the saved outputs of a complete sequential execution on 11 November 2026.
 
-## Setup and execution
+## Notebooks
 
-From the repository root, create a Python 3.13 environment and install the project:
+Run these notebooks in order, with a fresh kernel for each:
+
+1. [Equity Data Preparation](notebooks/Equity_Data_Preparation.ipynb): source inventory, market-quality checks, dated security mapping, financial and industry events, monthly universe construction, total-return prices, next-close labels and source-coverage audits.
+2. [Equity Strategy Research](notebooks/Equity_Strategy_Research.ipynb): input verification, factor screening, feature engineering, chronological CV, validation selection, evaluation, robustness, return attribution and accounting checks.
+
+Data preparation reads raw inputs without requiring an older research database. It publishes `data/processed/latest_snapshot.json` only after every stage succeeds. The strategy notebook verifies the completed dataset, its checksums, canonical price chain and labels. Every execution creates a new timestamped run and trains models afresh.
+
+## Local setup
+
+Use Python 3.13 from the repository root:
 
 ```bash
 python3.13 -m venv .venv
@@ -15,49 +24,63 @@ python3.13 -m venv .venv
 .venv/bin/python -m ipykernel install --user --name team34-project2 --display-name "Python (Team 34 Project 2)"
 ```
 
-On macOS, XGBoost may require the OpenMP runtime (`brew install libomp`).
+Select **Python (Team 34 Project 2)** and use **Restart Kernel → Run All** in each notebook. On macOS, XGBoost may require `brew install libomp`.
 
-Obtain the team's authorized research snapshot and place its contents under `data/`. The notebook expects `data/panels/`, `data/metadata/` and `data/checksums.sha256`. This is a supplied market and accounting panel snapshot with a cached SPY benchmark, and is excluded from Git. The notebook verifies input hashes, audits coverage and financial availability, and writes a separate cleaned dataset with rebuilt labels.
+Raw datasets are supplied separately and remain local:
 
-Open the notebook with the **Python (Team 34 Project 2)** kernel and choose **Restart Kernel → Run All**. A terminal run from the repository root is also supported:
-
-```bash
-.venv/bin/jupyter nbconvert --to notebook --execute \
-  --ExecutePreprocessor.kernel_name=team34-project2 \
-  --ExecutePreprocessor.timeout=-1 \
-  --output=Equity_Strategy_Research.executed \
-  --output-dir=runs \
-  notebooks/Equity_Strategy_Research.ipynb
+```text
+data/
+  raw/
+    wrds/14_1_crsp_daily/        CRSP daily prices, names and delistings
+    wrds/14_2_compustat/         downloaded Compustat extracts
+    wrds/14_3_ccm_link/          dated CCM security links
+    compustat/quarterly/Comp_Quarterly6126.csv.zip
+    compustat/annual/20250102updated north fundamental_dta.zip
+    benchmark/SPY.gz            archived raw Yahoo chart response
+    benchmark/SPY.json          source provenance
+    sina/<capture>/            supplementary raw vendor responses
+  processed/
+    <data-run>/research_snapshot/
+    latest_snapshot.json
 ```
 
-Allow time and disk space for data preparation, 396 model fits, 38 portfolio ledgers and the daily factor model. A fresh execution builds a new timestamped experiment under `runs/` from the supplied snapshot.
+The quarterly archive supplies full financial history and release proxies; the North America annual archive supplies historical SIC. Sina is checked with fresh requests, but its turnover/VWAP is excluded from strategy inputs because coverage is incomplete. Liquidity screening uses CRSP unadjusted close × share volume.
 
-**Release status.** Saved notebook outputs combine the main run, verified checkpoint recovery and later targeted reruns for the weighting comparison, OOS diagnostics and holdings-based attribution. The current notebook still needs one uninterrupted top-to-bottom rerun to verify the complete workflow. The report under `reports/` reflects the previous study, and the video for the current notebook is pending.
+Allow several GB of free space for the published dataset, training matrices and model outputs. `runs/` contains local execution artifacts; `results/` contains compact, shareable summaries. Data, backups, model files and per-security forecasts/holdings are excluded from Git. Saved notebook outputs are retained.
 
 ## Research design
 
-| Stage | Dates and rule |
+| Stage | Protocol |
 |---|---|
-| WQ direction and screening | Calibrate directions in 2015–2017. Screen 36 WQ candidates in 2018–2019 using RankIC, coverage, annual stability and correlation. |
-| Hyperparameter selection | Use expanding-window CV with annual scoring folds in 2020–2022. Compare fundamental, fundamental plus WQ, and engineered features for Ridge, Lasso and XGBoost. |
-| Portfolio selection | In 2023, compare four scores under three weightings: equal, square-root capitalization and capitalization. Select the highest net Sharpe among the 12 candidates with finite Sharpe and mean cash at most 5%. |
-| Chronological evaluation | Evaluate the frozen choices in 2024–2025. ML models refit every half-year on the preceding five calendar years using only labels that matured before the forecast boundary. |
+| Data | CRSP 2014–2025, with earlier Compustat history for accounting features. Dated CCM links; explicit quote, missing-data and delisting treatment. |
+| Universe | Monthly top 80% by 60-session mean dollar-volume proxy; 252 observed closes; raw close ≥ $5; daily security/price gates. The completed dataset contains 4,366 ever-selected securities. |
+| Prices and targets | Causal float64 total-return chains from source returns. Target: T+1 close to T+11 close. Unmatured tail labels remain missing. |
+| WQ screening | Directions from 2015–2017; 36 candidates screened in 2018–2019 using RankIC, coverage, annual stability and correlation. Six factors pass. |
+| Model tuning | Three feature sets: fundamentals; fundamentals plus WQ; all engineered features. Expanding annual CV folds in 2020–2022 with purged labels and fresh semiannual fits: 63 configurations, 189 scored folds. |
+| Portfolio selection | In 2023, compare four scores × three weightings: equal, square-root cap and market cap. Select maximum net Sharpe among finite-Sharpe candidates with mean cash ≤ 5%. |
+| Evaluation | Freeze specifications before 2024–2025 evaluation. ML forecasts refit semiannually on the preceding five calendar years using mature labels only. |
 
-Signals formed at the close are executed at the next close. The supervised target is the adjusted return from T+1 close to T+11 close. Portfolio tests use a Top100 target, rank-150 retention buffer, ten-session rebalancing, 2% formation weight cap and a 10 bps charge per traded dollar. SPY and matched full-pool portfolios are benchmarks. Accounting vintages, universe provenance and unresolved terminal payouts constrain interpretation.
+Trading uses next-close execution, Top100 selection, a rank-150 retention buffer, ten-session rebalancing, a 2% formation-weight cap and 10 bps per traded dollar. SPY and matched full-pool portfolios are controls. Costs, leave-one-factor-out checks and benchmark-relative return attribution use the six-factor market-cap portfolio; holdings-based risk attribution uses the validation-selected portfolio.
 
-## Results and diagnostics
+WQ price and screening calculations retain float64 precision before final model-feature storage. This avoids changes caused by differently normalized, prematurely rounded adjustment factors.
 
-The 2023 validation selects **six-factor direct scoring with capitalization weights**. Its 2024–2025 net CAGR is **24.92%**, net Sharpe **1.407**, and maximum drawdown **−20.76%**. On the same dates, SPY records **22.19%**, **1.307**, and **−18.76%**, respectively.
+## Latest results and verification
 
-- [Portfolio summary](results/portfolio_summary.csv) and [selection record](results/frozen_family.json) document the candidate grid and decision.
-- [Period metrics](results/period_metrics.csv) and [prediction OOS R²](results/period_oos_r2.csv) support the four-panel comparison. The six-factor score is mapped to return units with pooled OLS using mature labels from the same past five-year windows. This diagnostic leaves the portfolio's direct ranking rule intact.
-- The notebook includes the selection, weighting and universe decomposition, plus holdings-based Barra-style attribution for the selected portfolio. [Factor exposures and contributions](results/barra_factors.csv) and [residual alpha](results/barra_alpha.csv) use the available market, SIC industry and nine style factors. Growth is unavailable. Residual alpha is conditional on this research risk model.
-- [Portfolio audit](results/portfolio_audit.json) records ledger reconciliation. Full daily artifacts are written under `runs/`.
+The 2023 rule selects **six-factor direct score with market-cap weights** (`fundamental_cap`), with validation net Sharpe **1.3325**.
 
-Run regression tests from the repository root:
+| 2024–2025 | Net CAGR | Annual volatility | Sharpe | Max drawdown |
+|---|---:|---:|---:|---:|
+| Selected strategy | 24.92% | 16.81% | 1.4074 | −20.76% |
+| SPY | 22.19% | 16.35% | 1.3071 | −18.76% |
+
+The notebooks include OOS prediction R², period-level return/risk plots, trading-cost and factor-ablation checks, linked return attribution, and a US adaptation of the repository's Barra-style market/industry/style model. Estimated residual alpha is conditional on that model and is not evidence of a guaranteed tradable alpha.
+
+Verification completed: **74 tests, 396 fresh model fits, 38 portfolio ledgers**, source-hash checks, universe truncation checks and an independent source-return check of 8,945,343 labels. A repeated XGBoost fit produced exactly identical predictions. See [reproduction audit](results/reproduction_audit.json) and [Chinese project status](项目最新进度.md).
 
 ```bash
-.venv/bin/python -m pytest tests -q
+PYTHONPATH=src .venv/bin/python -m pytest tests -q
 ```
 
-Source is under `src/`, tests under `tests/`, and compact result tables under `results/`. The local `data/`, `backups/` and `runs/` directories are excluded from the repository.
+Financial statements are latest-download vintages; release dates are proxies, FIC/PRIUSA are static descriptors, and some terminal payouts remain unknown. The 2024–2025 results are a historical evaluation of previously inspected data, rather than a new blind holdout.
+
+**Deliverable status:** notebooks and compact results are current. Files under `reports/` retain the earlier report and have not been revised to this pipeline. The new presentation video is pending.
