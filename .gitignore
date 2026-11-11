@@ -19,3 +19,4 @@ reports/final/*.out
 reports/final/*.toc
 
 /backups/
+/data.zip
