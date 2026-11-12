@@ -4,14 +4,6 @@ Team 34: Wan Gehong, Wang Tianyi, Wu Jiarui, Yan Tianao.
 
 This project builds a US equity dataset from raw downloads and compares a six-factor direct score with Ridge, Lasso and XGBoost under common portfolio rules. Both notebooks contain the saved outputs of a complete sequential execution on 11 November 2026.
 
-The repository supports the following workflows:
-
-| Purpose | Entry point | Local research data needed? |
-|---|---|---|
-| Read the study | [English report, 21 pages](reports/final/Group_34_Report.pdf), saved notebook outputs, or [result tables](results/) | No; view the published files without Run All. |
-| Edit/rebuild the report | [Editable report template](reports/final/notebook_report_template.tex) and the report-only commands below | No; uses saved outputs and requires the Python environment plus LaTeX. |
-| Reproduce the experiments | Data-preparation notebook, then strategy notebook | Yes; use the required raw inputs or a complete prepared dataset, as described below. |
-
 ## Notebooks
 
 Run these notebooks in order, with a fresh kernel for each:
